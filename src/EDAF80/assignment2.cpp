@@ -43,7 +43,7 @@ void
 edaf80::Assignment2::run()
 {
 	// Load the sphere geometry
-	auto const shape = parametric_shapes::createCircleRing(2.0f, 0.75f, 40u, 4u);
+	auto const shape = parametric_shapes::createSphere(0.15f, 10u, 10u);
 	if (shape.vao == 0u)
 		return;
 
@@ -51,6 +51,7 @@ edaf80::Assignment2::run()
 	mCamera.mWorld.SetTranslate(glm::vec3(0.0f, 1.0f, 9.0f));
 	mCamera.mMouseSensitivity = glm::vec2(0.003f);
 	mCamera.mMovementSpeed = glm::vec3(3.0f); // 3 m/s => 10.8 km/h
+	// mCamera.mWorld.SetRotateX(glm::half_pi<float>());
 
 	// Create the shader programs
 	ShaderProgramManager program_manager;
@@ -111,7 +112,7 @@ edaf80::Assignment2::run()
 
 	// Set the default tensions value; it can always be changed at runtime
 	// through the "Scene Controls" window.
-	float catmull_rom_tension = 0.0f;
+	float catmull_rom_tension = 0.5f;
 
 	// Set whether the default interpolation algorithm should be the linear one;
 	// it can always be changed at runtime through the "Scene Controls" window.
@@ -132,6 +133,7 @@ edaf80::Assignment2::run()
 
 
 	//! \todo Create a tesselated sphere and a tesselated torus
+	
 
 
 	glClearDepthf(1.0f);
@@ -217,14 +219,44 @@ edaf80::Assignment2::run()
 			//! \todo Interpolate the movement of a shape between various
 			//!        control points.
 			if (use_linear) {
-				//! \todo Compute the interpolated position
-				//!       using the linear interpolation.
+				// Time-based segment selection: one segment per second, looped
+				auto const n = static_cast<float>(control_point_locations.size());
+				float const segment_duration = 1.0f; // seconds per segment
+				float const total_duration = n * segment_duration;
+				float const t_global = std::fmod(elapsed_time_s, total_duration);
+				float const seg_f = t_global / segment_duration;
+				std::size_t const i = static_cast<std::size_t>(std::floor(seg_f)) % control_point_locations.size();
+				float const x = seg_f - std::floor(seg_f); // local parameter in [0,1)
+
+				glm::vec3 const& p0 = control_point_locations[i];
+				glm::vec3 const& p1 = control_point_locations[(i + 1u) % control_point_locations.size()];
+				glm::vec3 newPosition = interpolation::evalLERP(p0, p1, x);
+				circle_rings_transform_ref.SetTranslate(newPosition);
 			}
 			else {
-				//! \todo Compute the interpolated position
-				//!       using the Catmull-Rom interpolation;
-				//!       use the `catmull_rom_tension`
-				//!       variable as your tension argument.
+				// Time-based segment selection: same scheme as linear, but use
+				// Catmull-Rom over four control points and wrap around.
+				auto const count = control_point_locations.size();
+				float const segment_duration = 1.0f;
+				float const total_duration = static_cast<float>(count) * segment_duration;
+				float const t_global = std::fmod(elapsed_time_s, total_duration);
+				float const seg_f = t_global / segment_duration;
+				std::size_t const i = static_cast<std::size_t>(std::floor(seg_f)) % count;
+				float const x = seg_f - std::floor(seg_f);
+
+				// indices for Catmull-Rom: p_{i-1}, p_i, p_{i+1}, p_{i+2}
+				auto idx_im1 = (i + count - 1u) % count;
+				auto idx_i = i;
+				auto idx_ip1 = (i + 1u) % count;
+				auto idx_ip2 = (i + 2u) % count;
+
+				glm::vec3 const& pm1 = control_point_locations[idx_im1];
+				glm::vec3 const& p0 = control_point_locations[idx_i];
+				glm::vec3 const& p1 = control_point_locations[idx_ip1];
+				glm::vec3 const& p2 = control_point_locations[idx_ip2];
+
+				glm::vec3 newPosition = interpolation::evalCatmullRom(pm1, p0, p1, p2, catmull_rom_tension, x);
+				circle_rings_transform_ref.SetTranslate(newPosition);
 			}
 		}
 
