@@ -83,17 +83,35 @@ edaf80::Assignment3::run()
 	if (texcoord_shader == 0u)
 		LogError("Failed to load texcoord shader");
 
+	GLuint skybox_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Skybox",
+	                                         { { ShaderType::vertex, "EDAF80/skybox.vert" },
+	                                           { ShaderType::fragment, "EDAF80/skybox.frag" } },
+	                                         skybox_shader);
+	if (skybox_shader == 0u)
+		LogError("Failed to load skybox shader");
+
+	GLuint phong_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Phong",
+	                                         { { ShaderType::vertex, "EDAF80/phong.vert" },
+	                                           { ShaderType::fragment, "EDAF80/phong.frag" } },
+	                                         phong_shader);
+	if (phong_shader == 0u)
+		LogError("Failed to load phong shader");
+
 	auto light_position = glm::vec3(-2.0f, 4.0f, 2.0f);
 	auto const set_uniforms = [&light_position](GLuint program){
 		glUniform3fv(glGetUniformLocation(program, "light_position"), 1, glm::value_ptr(light_position));
 	};
 
-	bool use_normal_mapping = false;
+	bool use_normal_mapping = true;
+	bool use_rough_mapping = true;
 	auto camera_position = mCamera.mWorld.GetTranslation();
-	auto const phong_set_uniforms = [&use_normal_mapping,&light_position,&camera_position](GLuint program){
+	auto const phong_set_uniforms = [&use_normal_mapping, &light_position, &camera_position, &use_rough_mapping](GLuint program){
 		glUniform1i(glGetUniformLocation(program, "use_normal_mapping"), use_normal_mapping ? 1 : 0);
 		glUniform3fv(glGetUniformLocation(program, "light_position"), 1, glm::value_ptr(light_position));
 		glUniform3fv(glGetUniformLocation(program, "camera_position"), 1, glm::value_ptr(camera_position));
+		glUniform1i(glGetUniformLocation(program, "use_rough_mapping"), use_rough_mapping ? 1 : 0);
 	};
 
 
@@ -108,24 +126,57 @@ edaf80::Assignment3::run()
 
 	Node skybox;
 	skybox.set_geometry(skybox_shape);
-	skybox.set_program(&fallback_shader, set_uniforms);
 
+	// Try to load a cubemap from the resources and use the dedicated
+	// skybox shader. If loading fails, fall back to the simple shader.
+	// std::string const skybox_name = "LarnacaCastle";
+	std::string const skybox_name = "NissiBeach2";
+	GLuint skybox_cubemap = bonobo::loadTextureCubeMap(
+		config::resources_path("cubemaps/" + skybox_name + "/posx.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/negx.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/posy.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/negy.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/posz.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/negz.jpg"),
+		true);
+	if (skybox_cubemap == 0u) {
+		exit(EXIT_FAILURE);
+		LogWarning("Failed to load skybox cubemap; using fallback shader");
+		skybox.set_program(&fallback_shader, set_uniforms);
+	} else {
+		skybox.add_texture("cube_texture", skybox_cubemap, GL_TEXTURE_CUBE_MAP);
+		skybox.set_program(&skybox_shader, set_uniforms);
+	}
+
+
+	// DEMO SPHERE STUFF
+	Node demo_sphere;
+	
 	auto demo_shape = parametric_shapes::createSphere(1.5f, 40u, 40u);
 	if (demo_shape.vao == 0u) {
 		LogError("Failed to retrieve the mesh for the demo sphere");
 		return;
 	}
+	demo_sphere.set_geometry(demo_shape);
 
 	bonobo::material_data demo_material;
 	demo_material.ambient = glm::vec3(0.1f, 0.1f, 0.1f);
 	demo_material.diffuse = glm::vec3(0.7f, 0.2f, 0.4f);
 	demo_material.specular = glm::vec3(1.0f, 1.0f, 1.0f);
 	demo_material.shininess = 10.0f;
-
-	Node demo_sphere;
-	demo_sphere.set_geometry(demo_shape);
 	demo_sphere.set_material_constants(demo_material);
-	demo_sphere.set_program(&fallback_shader, phong_set_uniforms);
+
+	GLuint diffuse_texture = bonobo::loadTexture2D(config::resources_path("textures/cobblestone_floor_08_diff_2k.jpg"));
+	GLuint normal_texture  = bonobo::loadTexture2D(config::resources_path("textures/cobblestone_floor_08_nor_2k.jpg"));
+	GLuint rough_texture   = bonobo::loadTexture2D(config::resources_path("textures/cobblestone_floor_08_rough_2k.jpg"));
+	if (diffuse_texture == 0u || normal_texture == 0u || rough_texture == 0u) {
+		LogError("Failed to retrieve one of the needed textures for demo sphere.");
+	}
+	demo_sphere.add_texture("diffuse_texture", diffuse_texture, GL_TEXTURE_2D);
+	demo_sphere.add_texture("normal_texture", normal_texture, GL_TEXTURE_2D);
+	demo_sphere.add_texture("rough_texture", rough_texture, GL_TEXTURE_2D);
+
+	demo_sphere.set_program(&phong_shader, phong_set_uniforms);
 
 
 	glClearDepthf(1.0f);
@@ -218,6 +269,7 @@ edaf80::Assignment3::run()
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("Use normal mapping", &use_normal_mapping);
+			ImGui::Checkbox("Use rough mapping", &use_rough_mapping);
 			ImGui::ColorEdit3("Ambient", glm::value_ptr(demo_material.ambient));
 			ImGui::ColorEdit3("Diffuse", glm::value_ptr(demo_material.diffuse));
 			ImGui::ColorEdit3("Specular", glm::value_ptr(demo_material.specular));

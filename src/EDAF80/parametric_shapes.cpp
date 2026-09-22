@@ -171,37 +171,21 @@ parametric_shapes::createSphere(float const radius,
 										   radius * sin_phi,
 										   radius * cos_theta * cos_phi);
 
-			// normal: prefer cross(dp_dtheta, dp_dphi) when valid, else fallback
-			auto n = glm::cross(dp_dtheta, dp_dphi);
-			if (glm::length(n) > 1e-6f)
-				n = glm::normalize(n);
-			else
-				n = glm::normalize(vertices[index]);
-			normals[index] = n;
+			
+			// tangent
+			tangents[index] = dp_dtheta;
 
-			// tangent: use dp_dtheta if it has length, otherwise fallback to stable method
-			glm::vec3 t = dp_dtheta;
-			if (glm::length(t) > 1e-6f)
-				t = glm::normalize(t);
-			else {
-				glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-				if (std::abs(glm::dot(up, n)) > 0.999f)
-					up = glm::vec3(1.0f, 0.0f, 0.0f);
-				t = glm::normalize(glm::cross(up, n));
-			}
-			tangents[index] = t;
+			// binormal
+			binormals[index] = dp_dphi;
 
-			// binormal: use dp_dphi if valid, else compute from n and t
-			glm::vec3 b = dp_dphi;
-			if (glm::length(b) > 1e-6f)
-				b = glm::normalize(b);
-			else
-				b = glm::normalize(glm::cross(n, t));
-			binormals[index] = b;
+			// normal
+			normals[index] = glm::normalize(glm::cross(dp_dtheta, dp_dphi));
+
+			// texture coordinates
 			texcoords[index] = glm::vec3(static_cast<float>(j) / (static_cast<float>(sphere_slice_vertices_count)),
 			                             static_cast<float>(i) / (static_cast<float>(sphere_stack_vertices_count)),
 			                             0.0f);
-			
+
 			++index;
 			}
 		}
@@ -274,7 +258,7 @@ parametric_shapes::createSphere(float const radius,
 	data.indices_nb = static_cast<GLsizei>(index_sets.size() * 3u);
 	glGenBuffers(1, &data.ibo);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, data.ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(data.indices_nb * sizeof(glm::uvec3)), index_sets.data(), GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(index_sets.size() * sizeof(glm::uvec3)), index_sets.data(), GL_STATIC_DRAW);
 
 	glBindVertexArray(0u);
 	glBindBuffer(GL_ARRAY_BUFFER, 0u);
