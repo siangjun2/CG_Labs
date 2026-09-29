@@ -214,6 +214,7 @@ edaf80::Assignment3::run()
 			mCamera.mWorld.LookAt(glm::vec3(0.0f));
 		}
 		camera_position = mCamera.mWorld.GetTranslation();
+		skybox.get_transform().SetTranslate(camera_position);
 
 		if (inputHandler.GetKeycodeState(GLFW_KEY_R) & JUST_PRESSED) {
 			shader_reload_failed = !program_manager.ReloadAllPrograms();
@@ -249,8 +250,12 @@ edaf80::Assignment3::run()
 		glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 		bonobo::changePolygonMode(polygon_mode);
 
-
+		// Disable depth writes to render skybox at the back (keep depth test enabled)
+		glDepthMask(GL_FALSE);
 		skybox.render(mCamera.GetWorldToClipMatrix());
+		glDepthMask(GL_TRUE);
+
+		// Render the scene objects (depth writes enabled)
 		demo_sphere.render(mCamera.GetWorldToClipMatrix());
 
 
