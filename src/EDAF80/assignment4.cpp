@@ -62,12 +62,87 @@ edaf80::Assignment4::run()
 	// Todo: Insert the creation of other shader programs.
 	//       (Check how it was done in assignment 3.)
 	//
+	GLuint water_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Water",
+	                                         { { ShaderType::vertex, "EDAF80/water.vert" },
+	                                           { ShaderType::fragment, "EDAF80/water.frag" } },
+	                                         water_shader);
+	if (water_shader == 0u)
+		LogError("Failed to load water shader");
+
+	GLuint skybox_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Skybox",
+	                                         { { ShaderType::vertex, "EDAF80/skybox.vert" },
+	                                           { ShaderType::fragment, "EDAF80/skybox.frag" } },
+	                                         skybox_shader);
+	if (skybox_shader == 0u)
+		LogError("Failed to load skybox shader");
 
 	float elapsed_time_s = 0.0f;
+	bool use_base_color = true;
+	bool use_reflection = true;
+	bool use_refraction = true;
+	auto const set_water_uniforms = [&elapsed_time_s, &camera_position, &use_base_color, &use_reflection, &use_refraction](GLuint program) {
+		glUniform1f(glGetUniformLocation(program, "time"), elapsed_time_s);
+		glUniform3fv(glGetUniformLocation(program, "camera_position"), 1, glm::value_ptr(camera_position));
+		glUniform1i(glGetUniformLocation(program, "use_base_color"), use_base_color);
+		glUniform1i(glGetUniformLocation(program, "use_reflection"), use_reflection);
+		glUniform1i(glGetUniformLocation(program, "use_refraction"), use_refraction);
+	};
 
 	//
 	// Todo: Load your geometry
 	//
+	
+	// SKYBOX
+	Node skybox;
+	
+	auto skybox_shape = parametric_shapes::createSphere(20.0f, 100u, 100u);
+	if (skybox_shape.vao == 0u) {
+		LogError("Failed to retrieve the mesh for the skybox");
+		return;
+	}
+	skybox.set_geometry(skybox_shape);
+
+	std::string const skybox_name = "NissiBeach2";
+	GLuint skybox_cubemap = bonobo::loadTextureCubeMap(
+		config::resources_path("cubemaps/" + skybox_name + "/posx.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/negx.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/posy.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/negy.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/posz.jpg"),
+		config::resources_path("cubemaps/" + skybox_name + "/negz.jpg"),
+		true);
+	if (skybox_cubemap == 0u) {
+		LogWarning("Failed to load skybox cubemap; using fallback shader");
+		skybox.set_program(&fallback_shader);
+	} else { // Success cubemap load
+		skybox.add_texture("cube_texture", skybox_cubemap, GL_TEXTURE_CUBE_MAP);
+		skybox.set_program(&skybox_shader);
+	}
+
+	// WAVE STUFF
+	Node wave;
+
+	auto wave_shape = parametric_shapes::createQuad(100, 100, 999, 999); // 100 x 100 surface with 1000 subdivisions
+	if (wave_shape.vao == 0u) {
+		LogError("Failed to retrieve the mesh for the skybox");
+		return;
+	}
+	wave.set_geometry(wave_shape);
+	if (skybox_cubemap != 0u)
+		wave.add_texture("cube_texture", skybox_cubemap, GL_TEXTURE_CUBE_MAP);
+	else
+		LogWarning("Water will render with its fallback colors because the cubemap could not be loaded");
+	GLuint wave_normal_map = bonobo::loadTexture2D(config::resources_path("textures/waves.png"));
+	if (wave_normal_map != 0u)
+		wave.add_texture("normal_texture", wave_normal_map, GL_TEXTURE_2D);
+	else
+		LogWarning("Water will render without animated normal-map ripples because waves.png could not be loaded");
+	if (water_shader != 0u)
+		wave.set_program(&water_shader, set_water_uniforms);
+	else
+		wave.set_program(&fallback_shader);
 
 	glClearDepthf(1.0f);
 	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -107,6 +182,7 @@ edaf80::Assignment4::run()
 			mCamera.mWorld.LookAt(glm::vec3(0.0f));
 		}
 		camera_position = mCamera.mWorld.GetTranslation();
+		skybox.get_transform().SetTranslate(camera_position);
 
 		if (inputHandler.GetKeycodeState(GLFW_KEY_R) & JUST_PRESSED) {
 			shader_reload_failed = !program_manager.ReloadAllPrograms();
@@ -150,6 +226,10 @@ edaf80::Assignment4::run()
 			//
 			// Todo: Render all your geometry here.
 			//
+			glDepthMask(GL_FALSE);
+			skybox.render(mCamera.GetWorldToClipMatrix());
+			glDepthMask(GL_TRUE);
+			wave.render(mCamera.GetWorldToClipMatrix());
 		}
 
 
@@ -165,6 +245,10 @@ edaf80::Assignment4::run()
 		if (opened) {
 			ImGui::Checkbox("Pause animation", &pause_animation);
 			ImGui::Checkbox("Use orbit camera", &use_orbit_camera);
+			ImGui::Separator();
+			ImGui::Checkbox("Show base colour", &use_base_color);
+			ImGui::Checkbox("Show reflection", &use_reflection);
+			ImGui::Checkbox("Show refraction", &use_refraction);
 			ImGui::Separator();
 			auto const cull_mode_changed = bonobo::uiSelectCullMode("Cull mode", cull_mode);
 			if (cull_mode_changed) {

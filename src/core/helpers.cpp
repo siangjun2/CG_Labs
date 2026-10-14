@@ -280,7 +280,7 @@ bonobo::loadObjects(std::string const& filename)
 			glVertexAttribPointer(static_cast<unsigned int>(bonobo::shader_bindings::texcoords), 3, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<GLvoid const*>(texcoords_offset));
 		}
 
-		if (assimp_object_mesh->HasTangentsAndBitangents()) {
+		if (assimp_object_mesh->HasTangentsAndBitangents()) {	
 			glBufferSubData(GL_ARRAY_BUFFER, tangents_offset, tangents_size, static_cast<GLvoid const*>(assimp_object_mesh->mTangents));
 			glEnableVertexAttribArray(static_cast<unsigned int>(bonobo::shader_bindings::tangents));
 			glVertexAttribPointer(static_cast<unsigned int>(bonobo::shader_bindings::tangents), 3, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<GLvoid const*>(tangents_offset));
